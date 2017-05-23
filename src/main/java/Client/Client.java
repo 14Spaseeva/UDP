@@ -3,6 +3,8 @@ package Client;
 import java.io.File;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 /**
  * Created by ASPA on 05.05.2017.
@@ -13,29 +15,40 @@ public class Client {
     private int port = 6666;
     private String adress;
     private String fileName;
-    private  final int  packageSize =  2000;
+    private final int packageSize = 2000; //размер блока
 
+
+//определеять метод интрефейса callback
 
     private ObjectInputStream objIn;
     private ObjectOutputStream objOut;
 
+    InetAddress IPAddress;
 
-    Client(String address, int port, String fileName){
-        this.adress=address;
-        this.port=port;
-        this.fileName=fileName;
+    long packageCount;
+    File fileToTransfer;
 
-        File fileToTransfer = new File(fileName); //для передачи в самой первой датаграмме
-        // fileToTransfer.length() -int
-        long packageCount; //кол-во пакетов
-        packageCount = (long) Math.ceil((double) fileToTransfer.length()/packageSize);
+    Client(String address, int port, String fileName) {
+        this.adress = address;
+        this.port = port;
+        this.fileName = fileName;
+        try {
+            IPAddress = InetAddress.getByName("localhost");
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
 
-       //TODO InitPackage initPackage = new InitPackage();
+        fileToTransfer = new File(fileName); //для передачи в самой первой датаграмме
+        packageCount = (long) Math.ceil((double) fileToTransfer.length() / packageSize);//кол-во пакетов
 
+        InitPackage initPackage = new InitPackage(fileToTransfer.length(), fileName, packageCount ); //что за filesize?
 
 
     }
 
+    FileReader(this::onRead, )
+        void onRead(byte[] ..)
+//со стороны клиента определяем метод callback-а
     public static void main(String[] args) {
 
     }
