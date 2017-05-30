@@ -17,9 +17,6 @@ public class Channel<T> {
 
     private final int maxSize;
     private final LinkedList<T> queue; //очередь незапущенных клиентов, пришедших из хоста /// нам он не нуженб
-    //todo заменить линкдлист на cycledBuffer
-
-
     private final Object lock = new Object();
 
     public Channel(int num) {
@@ -62,7 +59,7 @@ public class Channel<T> {
     он ставится в ожидание до тех пор, пока какой-нибудь другой
     поток не положит элементы в очередь.
      */
-    T get() {
+    public T get() {
         synchronized (lock) {
             while (queue.isEmpty()) {
                 try {

@@ -9,6 +9,7 @@ import java.nio.file.Paths;
  * Created by ASPA on 05.05.2017.
  */
 public class InitPackage implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     private long fileSize;
     private String fileName;
