@@ -1,14 +1,18 @@
 package Client;
 
-import CommonUtils.Channel;
+import CommonUtils.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.net.SocketException;
-import java.net.UnknownHostException;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 /**
  * Created by ASPA on 05.05.2017.
@@ -17,109 +21,204 @@ import java.net.UnknownHostException;
 public class Client {
     private static Logger log = LoggerFactory.getLogger("client");
 
-    private int port; //порт передачи данных
-    private String adress;
-    private final int packageSize = 2000; //размер блока
-    private int capacity; //ширина окна
-    private int timeout;
-    private String sendingFilePath; //путь к передаваемому файлу
-    private int receiverPort;//порт для приема подтверждений
-    private String fileName;
-    private FileInputStream fileInputStream;
-    private DatagramSocket datagramSocket;
-    private DatagramSocket receiverSocket;
+    private final ClientSender clientSender;
+    private final FileReader reader;
+    private final Receiver receiver;
 
-    private ObjectInputStream objIn;
-    private ObjectOutputStream objOut;
+    private final PartOfFileSlidingWidnow slidingWindow;
+    private final Channel<byte[]> readingBuffer;
+   private DatagramSocket socket;
+    private volatile int readingIndex = 1; // 0 - for init package
+    private Timer timer = new Timer();
 
-    InetAddress IPAddress;
-
-    long packageCount;
-    File fileToTransfer;
-
-    Client(int port, int capacity, String filePAth, int receiverPort) {
-        this.port = port;
-        this.adress = "localhost";
-        this.capacity = capacity;
-        this.sendingFilePath = filePAth;
-        this.receiverPort = receiverPort;
-        timeout = 2;
-        try {
-            IPAddress = InetAddress.getByName(adress);
-        } catch (UnknownHostException e) {
-            log.error("", e);
-        }
+    private static final long TIME_OUT = 1500;
 
 
-        try {
-            fileToTransfer = new File(sendingFilePath); //для передачи в самой первой датаграмме
-            fileName = fileToTransfer.getName();
-            fileInputStream = new FileInputStream(new File(sendingFilePath));
-        } catch (FileNotFoundException e) {
-            log.error("", e);
-        }
+    private Client(String fileName, int slidingWindowSize, int packageSize, InetAddress address, int serverPort) throws IOException {
 
-        packageCount = (long) Math.ceil((double) fileToTransfer.length() / packageSize);//кол-во пакетов
+        MyShutdownHook shutdownHook = new MyShutdownHook();
+        Runtime.getRuntime().addShutdownHook(shutdownHook);
+
+
+        slidingWindow = new PartOfFileSlidingWidnow(slidingWindowSize);
+        readingBuffer = new Channel<>(slidingWindowSize);
+
+        for (int i = 0; i < slidingWindowSize; i++)
+            readingBuffer.put(new byte[packageSize]);
+
+        File file = new File(fileName);
+        socket = new DatagramSocket();
+
+
+        long packageCount = (long) Math.ceil((double) file.length() / packageSize);
+
+        byte[] initPackageByte = new InitPackage(file.length(), fileName, packageCount + 1).toBytes();
+        TimedPartOfFile timedPartOfFile = new TimedPartOfFile(initPackageByte, 0);
+
+        slidingWindow.read(timedPartOfFile);
+
+        clientSender = new ClientSender(
+                slidingWindowSize,
+                packageSize,
+                packageNumber -> slidingWindow.setSendingTime(packageNumber, System.currentTimeMillis()),
+                socket,
+                address,
+                serverPort
+        );
+
+        clientSender.sent(timedPartOfFile);
+
+        reader = new FileReader(file, this::getReadingArray, this::onPartRead, this::onEnd);
+        receiver = new Receiver(socket, this::onPackageConfirm);
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                resend();
+            }
+        }, TIME_OUT, TIME_OUT);
     }
 
-    SlidingWindowController slidingWindowController;
-    FileReader fileReader;
-    ClientSender sender;
-    Timer timer;
-    ClientReceiver clientReceiver;
 
-    Thread fileReaderThread;
-    Thread receiverThread;
-    Thread senderThread;
-    Thread timerThread;
+    private void resend() {
+        slidingWindow.getNotConfirmedParts(TIME_OUT).forEach(clientSender::sent);
+    }
 
-    Channel channel;
+    private void onEnd() {
+        log.info("File has been read");
+        reader.stop();
+    }
 
-    void launch() {
-        channel = new Channel(2000000000);
-        try {
-            datagramSocket = new DatagramSocket();
-            receiverSocket = new DatagramSocket(receiverPort);
-
-            slidingWindowController = new SlidingWindowController(capacity, channel, timeout);
-            fileReader = new FileReader(fileInputStream, fileName, packageSize, slidingWindowController);
-            sender = new ClientSender(slidingWindowController, datagramSocket, IPAddress, port);
-            timer = new Timer(slidingWindowController);
-            clientReceiver = new ClientReceiver(slidingWindowController, receiverSocket);
-
-            fileReaderThread = new Thread(fileReader);
-            senderThread = new Thread(sender);
-            timerThread = new Thread(timer);
-            receiverThread = new Thread(clientReceiver);
-
-            Runtime.getRuntime().addShutdownHook(new Thread() {
-                public void run() {
-                    senderThread.interrupt();
-                    sender.stop();
-
-                    clientReceiver.stop();
-                    receiverThread.interrupt();
-
-                    timer.stop();
-                    timerThread.interrupt();
-                }
-            });
-
-            fileReaderThread.start();
-            senderThread.start();
-            timerThread.start();
-            receiverThread.start();
-
-        } catch (SocketException e) {
-            log.error("Cant be connected to port", e);
+    private void onPartRead(byte[] bytes, int realSize) {
+        if (bytes.length != realSize) {
+            byte[] newB = new byte[realSize];
+            System.arraycopy(bytes, 0, newB, 0, realSize);
+            bytes = newB;
         }
+
+        TimedPartOfFile partOfFile = new TimedPartOfFile(bytes, slidingWindow.getCurrentEnd());
+        slidingWindow.read(partOfFile);
+        clientSender.sent(getDataGram());
+    }
+
+
+    private byte[] getReadingArray() {
+
+        return readingBuffer.get();
+
+    }
+
+    private void onPackageConfirm(int pNubmer) {
+        if (slidingWindow.getCurrentStart() > pNubmer)
+            return;
+
+        slidingWindow.setConfirm(pNubmer);
+        for (TimedPartOfFile p : slidingWindow.moveWindow())
+            if (p.number != 0)
+                readingBuffer.put(p.data);
+    }
+
+    private PartOfFile getDataGram() {
+        return slidingWindow.get(readingIndex++);
+    }
+
+
+    private void shutdown() {
+        log.info("Shutting down");
+
+        clientSender.stop();
+        reader.stop();
+        receiver.stop();
+        timer.cancel();
+        log.info("Good night!");
 
     }
 
 
     public static void main(String[] args) {
-        Client client = new Client(8888, 5, "D:\\hospital_lab1.sql", 7777);
-        client.launch();
+        String inputadress = "D:\\UDPSourses\\Concurrency_Lecture_4.pdf";
+        try {
+            new Client(inputadress, 5, 2000, InetAddress.getLocalHost(), 4444);
+        } catch (IOException e) {
+            log.error("БУЛЬ БУЛЬ");
+        }
+    }
 
+
+    private static class PartOfFileSlidingWidnow extends ConcurrentSlidingWindow<TimedPartOfFile> {
+
+        PartOfFileSlidingWidnow(int size) {
+            super(size);
+        }
+
+        /**
+         * return stream of package without confirmation
+         *
+         * @param timeOutInMilliseconds timeout after it package should have confirm
+         * @return Stream of timeout packages
+         */
+        Stream<TimedPartOfFile> getNotConfirmedParts(long timeOutInMilliseconds) {
+            synchronized (lock) {
+                long now = System.currentTimeMillis();
+                return IntStream.range(getCurrentStart(), getCurrentEnd())
+                        .mapToObj(this::get)
+                        .filter(timedPartOfFile -> timedPartOfFile != null
+                                && !timedPartOfFile.getConfirm()
+                                && timedPartOfFile.gettimeOfSending() != 0
+                                && now - timedPartOfFile.gettimeOfSending() > timeOutInMilliseconds);
+            }
+        }
+
+        /**
+         * move window while number of packages in the front of window follow each other
+         *
+         * @return List of free packages after moving. Reuse data from them
+         */
+        public List<TimedPartOfFile> moveWindow() {
+            synchronized (lock) {
+                LinkedList<TimedPartOfFile> result = new LinkedList<>();
+                while (get(getCurrentStart()).getConfirm()) {
+                    result.add(move());
+                }
+                return result;
+            }
+        }
+
+        /**
+         * set sending time
+         *
+         * @param number  package number
+         * @param sending time of sending
+         */
+        public void setSendingTime(int number, long sending) {
+            synchronized (lock) {
+                if (number >= getCurrentStart()) {
+                    try {
+                        get(number).settimeOfSending(sending);
+                    } catch (NullPointerException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
+        /**
+         * Set some package confirm
+         *
+         * @param number number of package
+         */
+        public void setConfirm(int number) {
+            synchronized (lock) {
+                if (number >= getCurrentStart())
+                    get(number).setConfirm();
+            }
+        }
+
+    }
+
+
+    private class MyShutdownHook extends Thread {
+        public void run() {
+            shutdown();
+        }
     }
 }

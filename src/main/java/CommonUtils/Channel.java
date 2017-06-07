@@ -25,11 +25,6 @@ public class Channel<T> {
         queue = new LinkedList<>();
     }
 
-
-    synchronized int getSize() {
-        return queue.size();
-    }
-
     /**
     , когда поток пытается положить элементы в полную очередь,
     он ставится в ожидание до тех пор, пока какой-нибудь другой поток

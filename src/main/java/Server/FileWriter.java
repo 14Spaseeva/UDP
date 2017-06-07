@@ -1,60 +1,60 @@
 package Server;
 
+import CommonUtils.Cancable;
+import CommonUtils.Channel;
+import CommonUtils.InitPackage;
+import CommonUtils.PartOfFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 
 /**
  * Created by ASPA on 05.05.2017.
  */
-public class FileWriter implements Runnable{
+public class FileWriter implements Cancable{
     private static Logger log = LoggerFactory.getLogger("fileWriter");
 
-    private final String filePath;
-    private FileOutputStream fileOutputStream;
-    private final ReceiverSlidingWindow receiverSlidingWindow;
-    private boolean status;
-    private int packetSize;
+    private Thread thread;
+    private final Channel<PartOfFile> chanel;
+    private volatile boolean active = true;
 
+    FileWriter(int maxChannelSize) {
+        chanel = new Channel<>(maxChannelSize);
+    }
 
-        public FileWriter(String filePath, ReceiverSlidingWindow receiverSlidingWindow) {
-            this.receiverSlidingWindow = receiverSlidingWindow;
-            this.filePath = filePath;
-            packetSize = 0;
-            status = false;
-        }
+    void init(InitPackage initPackage) {
+        thread = new Thread(() -> {
+            try {
+                File file = new File(initPackage.getFileName());
+                OutputStream outputStream = new FileOutputStream("send" + file.getName());
+                while (active) {
+                    try {
+                        PartOfFile partOfFile = chanel.get();
+                        outputStream.write(partOfFile.data);
+                        if (initPackage.totalPackageCount - 1 == partOfFile.number) {
+                            stop();
+                        }
+                    } catch ( IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
 
+        });
+        thread.start();
+    }
 
     @Override
-    public void run() {
-        String fileName = receiverSlidingWindow.getFileName();
-        try {
-            fileOutputStream = new FileOutputStream(new File(filePath+fileName));
-        } catch (FileNotFoundException e) {
-            log.error("cant create filoutputstream", e);
-        }
-        status = true;
-        int id = 1;
-        try {
-            while(status) {
-                byte[] buffer = receiverSlidingWindow.get();
-                if (packetSize == 0) {
-                    packetSize = buffer.length;
-                }
-                fileOutputStream.write(buffer);
+    public void stop() {
+        active = false;
+        thread.interrupt();
+        log.info("Writer end work");
+    }
 
-                if (buffer.length < packetSize) {
-                    status = false;
-                }
-            }
-            fileOutputStream.close();
-        } catch (IOException e) {
-            log.error("problems with filestream in run()", e);
-        }
-        System.exit(0);
+    void write(PartOfFile bytes) {
+        chanel.put(bytes);
     }
 }

@@ -1,7 +1,9 @@
 package Client;
 
+import CommonUtils.ByteUtil;
+import CommonUtils.Cancable;
 import CommonUtils.Channel;
-import CommonUtils.Stopable;
+import CommonUtils.PartOfFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,6 +11,8 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketException;
+import java.util.function.Consumer;
 
 /**
  * Created by ASPA on 05.05.2017.
@@ -17,53 +21,64 @@ import java.net.InetAddress;
 
     //обьявляется в клиенте
 //читает из буфера, преобразовывает (+ номер пакета и тд и превращает в датаграмму), отправляет датаграмму серверу
-public class ClientSender implements Stopable {
-    private static Logger log = LoggerFactory.getLogger("clientSender");
+public class ClientSender implements Cancable {
+    private Thread thread;
+    private volatile boolean active = true;
+    private final Channel<PartOfFile> packetChannel;
+    private final byte[] buffer;
 
+    ClientSender(int chanelSize, int packageSize, Consumer<Integer> sendingConfirmation,
+                 DatagramSocket socket, InetAddress address, int port) throws SocketException {
 
-    private DatagramSocket datagramSocket;
-    private SlidingWindowController slidingWindowController;
-    private final InetAddress inetAddress;
-    private final int port;
-    private boolean status;
+        packetChannel = new Channel<>(chanelSize);
 
-    private Channel<Object> channel;
+        thread = new Thread(() -> {
+            while (true) {
+                if (!active || socket.isClosed())
+                    break;
+                try {
+                    DatagramPacket packet;
 
-    ClientSender(SlidingWindowController slidingWindowController, DatagramSocket datagramSocket,
-           InetAddress inetAddress, int port){
+                        PartOfFile partOfFile = packetChannel.get();
+                        packet = wrapPartOfFile(partOfFile);
+                        packet.setPort(port);
+                        packet.setAddress(address);
+                        socket.send(packet);
+                        sendingConfirmation.accept(partOfFile.number);
 
-        // buffer(byte[]) - из FileReader
-
-        //разбиваем по пакетам
-        //+  берем из Channel<T> из ЛР1 PartofFile, преобразуем в одну последовательность байт и отправляем
-
-        status=true;
-        this.slidingWindowController = slidingWindowController;
-        this.datagramSocket = datagramSocket;
-        this.inetAddress = inetAddress;
-        this.port = port;
-
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        thread.start();
+        buffer = new byte[packageSize + 4];
     }
 
     @Override
     public void stop() {
-        status=false;
-        datagramSocket.close();
-
+        active = false;
+        thread.interrupt();
+        System.out.println("ClientSender end work");
     }
 
-    @Override
-    public void run() {
-        DatagramPacket packet = new DatagramPacket(new byte[1], 1, inetAddress, port);
-        while(status) {
-            byte[] buffer = slidingWindowController.getBytes();
-            packet.setData(buffer);
-            packet.setLength(buffer.length);
-            try {
-                datagramSocket.send(packet);
-            } catch (IOException e) {
-                  log.error("cant send packet", e);
-            }
-        }
+    void sent(PartOfFile packet) {
+        packetChannel.put(packet);
+    }
+
+
+    private DatagramPacket wrapPartOfFile(PartOfFile partOfFile) {
+//        assert buffer.length == partOfFile.data.length + 4;
+
+        byte allBytes[] = buffer;
+        byte number[] = ByteUtil.intToByteArray(partOfFile.number);
+
+        //copy number to 0 - 4 bytes
+        System.arraycopy(number, 0, allBytes, 0, 4);
+
+        //copy data to 4 - last bytes
+        System.arraycopy(partOfFile.data, 0, allBytes, 4, partOfFile.data.length);
+
+        return new DatagramPacket(allBytes,  partOfFile.data.length + 4);
     }
 }
