@@ -25,9 +25,7 @@ public class Sender implements Cancable{
     private final DatagramSocket socket;
 
 
-    Sender(int chanalSize,
-           DatagramSocket socket
-    ) throws SocketException {
+    Sender(int chanalSize, DatagramSocket socket) throws SocketException {
         packetChannel = new Channel<>(chanalSize);
         this.socket = socket;
     }

@@ -40,11 +40,11 @@ public class ClientSender implements Cancable {
                     DatagramPacket packet;
 
                         PartOfFile partOfFile = packetChannel.get();
-                        packet = wrapPartOfFile(partOfFile);
+                        packet = wrapPartOfFile(partOfFile); //пакет в датаграмму
                         packet.setPort(port);
                         packet.setAddress(address);
                         socket.send(packet);
-                        sendingConfirmation.accept(partOfFile.number);
+                        sendingConfirmation.accept(partOfFile.number); //время отправки
 
                 } catch (IOException e) {
                     e.printStackTrace();

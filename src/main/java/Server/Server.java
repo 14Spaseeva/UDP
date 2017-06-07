@@ -1,7 +1,6 @@
 package Server;
 
 
-import Client.FileReader;
 import CommonUtils.DatagramTranslator;
 import CommonUtils.InitPackage;
 import CommonUtils.PartOfFile;
@@ -28,7 +27,7 @@ public class Server {
 
     private FileWriter writer;
     private Sender sender;
-    private ServerReceiver reciever;
+    private ServerReceiver receiver;
 
     private volatile int totalPackages;
 
@@ -48,12 +47,13 @@ public class Server {
 
         DatagramSocket socket = new DatagramSocket(port);
 
-        reciever = new ServerReceiver(socket, this::onReceive, () -> new byte[packageSize + 4]);
+        receiver = new ServerReceiver(socket, this::onReceive, () -> new byte[packageSize + 4]);
         writer = new FileWriter(slidingWindowSize);
         sender = new Sender(slidingWindowSize, socket);
 
     }
 
+    //
     private void onReceive(DatagramPacket packet) {
         if (timeOfStart == 0)
             timeOfStart = System.currentTimeMillis();
@@ -63,7 +63,7 @@ public class Server {
 
             if (partOfFile.number == 0 && !init) {
                 init = true;
-                InitPackage initPackage = InitPackage.fromBytes(partOfFile.data);
+                InitPackage initPackage = InitPackage.fromBytes(partOfFile.data); //десериализаия
                 totalPackages = (int) (initPackage.totalPackageCount);
                 writer.init(initPackage);
                 System.out.printf("Start receiving %s size: %d number of packages: %d%n", initPackage.getFileName(), initPackage.getFileSize(), initPackage.totalPackageCount);
@@ -96,7 +96,7 @@ public class Server {
             if (iterator.hasNext()) {
                 PartOfFile current = iterator.next();
                 List<PartOfFile> result = getWritePackages(iterator, current);
-                partOfFileMap.removeAll(result);
+                partOfFileMap.removeAll(result);//удалить все пройденные куски
                 for (PartOfFile p : result) {
                     write(p);
                     if (partOfFileMap.first().number == totalPackages - 1) {
@@ -132,7 +132,7 @@ public class Server {
 
     private void shutdown() {
         log.info("Shutting down");
-        reciever.stop();
+        receiver.stop();
         log.info("Good night!");
 
     }

@@ -14,12 +14,11 @@ import java.util.function.Consumer;
  * Created by ASPA on 05.05.2017.
  */
 public class Receiver implements Cancable {
-    //принимает подтверждения о передаче частей файла.
 
 
     private final Thread thread;
     private volatile boolean active = true;
-
+//закидывает куски файла в сервер
     Receiver(DatagramSocket socket, Consumer<Integer> confirm) {
         thread = new Thread(() -> {
             while (active) {

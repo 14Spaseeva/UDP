@@ -27,7 +27,7 @@ public class Client {
 
     private final PartOfFileSlidingWidnow slidingWindow;
     private final Channel<byte[]> readingBuffer;
-   private DatagramSocket socket;
+    private DatagramSocket socket;
     private volatile int readingIndex = 1; // 0 - for init package
     private Timer timer = new Timer();
 
@@ -51,7 +51,7 @@ public class Client {
 
 
         long packageCount = (long) Math.ceil((double) file.length() / packageSize);
-
+        //1й пакет
         byte[] initPackageByte = new InitPackage(file.length(), fileName, packageCount + 1).toBytes();
         TimedPartOfFile timedPartOfFile = new TimedPartOfFile(initPackageByte, 0);
 
@@ -106,7 +106,7 @@ public class Client {
         return readingBuffer.get();
 
     }
-
+    //отмечаем пакет доставлен+удалить из окна
     private void onPackageConfirm(int pNubmer) {
         if (slidingWindow.getCurrentStart() > pNubmer)
             return;
@@ -144,76 +144,6 @@ public class Client {
     }
 
 
-    private static class PartOfFileSlidingWidnow extends ConcurrentSlidingWindow<TimedPartOfFile> {
-
-        PartOfFileSlidingWidnow(int size) {
-            super(size);
-        }
-
-        /**
-         * return stream of package without confirmation
-         *
-         * @param timeOutInMilliseconds timeout after it package should have confirm
-         * @return Stream of timeout packages
-         */
-        Stream<TimedPartOfFile> getNotConfirmedParts(long timeOutInMilliseconds) {
-            synchronized (lock) {
-                long now = System.currentTimeMillis();
-                return IntStream.range(getCurrentStart(), getCurrentEnd())
-                        .mapToObj(this::get)
-                        .filter(timedPartOfFile -> timedPartOfFile != null
-                                && !timedPartOfFile.getConfirm()
-                                && timedPartOfFile.gettimeOfSending() != 0
-                                && now - timedPartOfFile.gettimeOfSending() > timeOutInMilliseconds);
-            }
-        }
-
-        /**
-         * move window while number of packages in the front of window follow each other
-         *
-         * @return List of free packages after moving. Reuse data from them
-         */
-        public List<TimedPartOfFile> moveWindow() {
-            synchronized (lock) {
-                LinkedList<TimedPartOfFile> result = new LinkedList<>();
-                while (get(getCurrentStart()).getConfirm()) {
-                    result.add(move());
-                }
-                return result;
-            }
-        }
-
-        /**
-         * set sending time
-         *
-         * @param number  package number
-         * @param sending time of sending
-         */
-        public void setSendingTime(int number, long sending) {
-            synchronized (lock) {
-                if (number >= getCurrentStart()) {
-                    try {
-                        get(number).settimeOfSending(sending);
-                    } catch (NullPointerException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
-        /**
-         * Set some package confirm
-         *
-         * @param number number of package
-         */
-        public void setConfirm(int number) {
-            synchronized (lock) {
-                if (number >= getCurrentStart())
-                    get(number).setConfirm();
-            }
-        }
-
-    }
 
 
     private class MyShutdownHook extends Thread {
