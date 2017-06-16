@@ -16,41 +16,43 @@ import java.util.function.Supplier;
  */
 
     public class FileReader implements Cancable {
-        private Thread thread;
-        private volatile boolean active = true;
 
-        FileReader(File file, Supplier<byte[]> sourceArray, CallBack confirmation, Runnable onEnd) throws FileNotFoundException {
-            FileInputStream fileInputStream = new FileInputStream(file);
-            thread = new Thread(() -> {
-                while (true) {
-                    if (!active)
+    private Thread thread;
+    private volatile boolean active = true;
+
+    public FileReader(File file, Supplier<byte[]> sourceArray, CallBack confirmation, Runnable onEnd)
+            throws FileNotFoundException {
+        FileInputStream fileInputStream = new FileInputStream(file);
+        thread = new Thread(() -> {
+            while (true) {
+                if (!active)
+                    break;
+                try {
+                    byte[] bytes = sourceArray.get();
+                    int read = fileInputStream.read(bytes);
+                    if (read == -1) {
+                        onEnd.run();
                         break;
-                    try {
-                        byte[] bytes = sourceArray.get();
-                        int read = fileInputStream.read(bytes);
-                        if (read == -1) {
-                            onEnd.run();
-                            break;
-                        } else {
-                            confirmation.onRead(bytes, read);
-                        }
-                    } catch (IOException e) {
-                        e.printStackTrace();
+                    } else {
+                        confirmation.onRead(bytes, read);
                     }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-            });
-            thread.start();
-        }
+            }
+        });
+        thread.start();
+    }
 
-        @Override
-        public void stop() {
-            active = false;
-            thread.interrupt();
-        }
+    @Override
+    public void cancel() {
+        active = false;
+        thread.interrupt();
+    }
 
-        public interface CallBack {
-            void onRead(byte[] data, int realSize);
-        }
+    public interface CallBack {
+        void onRead(byte[] data, int realSize);
+    }
 }
 
 

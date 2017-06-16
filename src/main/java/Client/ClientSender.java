@@ -19,18 +19,22 @@ import java.util.function.Consumer;
  */
 //оставить работу только отправки файлов
 
-    //обьявляется в клиенте
+//обьявляется в клиенте
 //читает из буфера, преобразовывает (+ номер пакета и тд и превращает в датаграмму), отправляет датаграмму серверу
 public class ClientSender implements Cancable {
+
     private Thread thread;
     private volatile boolean active = true;
     private final Channel<PartOfFile> packetChannel;
     private final byte[] buffer;
 
-    ClientSender(int chanelSize, int packageSize, Consumer<Integer> sendingConfirmation,
-                 DatagramSocket socket, InetAddress address, int port) throws SocketException {
 
-        packetChannel = new Channel<>(chanelSize);
+    public ClientSender(int chanalSize, int packageSize,
+                        Consumer<Integer> sendingConfirmation,
+                        DatagramSocket socket,
+                        InetAddress address,
+                        int port) throws SocketException {
+        packetChannel = new Channel<>(chanalSize);
 
         thread = new Thread(() -> {
             while (true) {
@@ -38,14 +42,12 @@ public class ClientSender implements Cancable {
                     break;
                 try {
                     DatagramPacket packet;
-
-                        PartOfFile partOfFile = packetChannel.get();
-                        packet = wrapPartOfFile(partOfFile); //пакет в датаграмму
-                        packet.setPort(port);
-                        packet.setAddress(address);
-                        socket.send(packet);
-                        sendingConfirmation.accept(partOfFile.number); //время отправки
-
+                    PartOfFile partOfFile = packetChannel.get();
+                    packet = wrapPartOfFile(partOfFile);
+                    packet.setPort(port);
+                    packet.setAddress(address);
+                    socket.send(packet);
+                    sendingConfirmation.accept(partOfFile.number);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -55,20 +57,11 @@ public class ClientSender implements Cancable {
         buffer = new byte[packageSize + 4];
     }
 
-    @Override
-    public void stop() {
-        active = false;
-        thread.interrupt();
-        System.out.println("ClientSender end work");
-    }
-
-    void sent(PartOfFile packet) {
+    public void sent(PartOfFile packet) {
         packetChannel.put(packet);
     }
 
-
-    private DatagramPacket wrapPartOfFile(PartOfFile partOfFile) {
-//        assert buffer.length == partOfFile.data.length + 4;
+    public DatagramPacket wrapPartOfFile(PartOfFile partOfFile) {
 
         byte allBytes[] = buffer;
         byte number[] = ByteUtil.intToByteArray(partOfFile.number);
@@ -80,5 +73,12 @@ public class ClientSender implements Cancable {
         System.arraycopy(partOfFile.data, 0, allBytes, 4, partOfFile.data.length);
 
         return new DatagramPacket(allBytes,  partOfFile.data.length + 4);
+    }
+
+    @Override
+    public void cancel() {
+        active = false;
+        thread.interrupt();
+        System.out.println("ClientSender end work");
     }
 }

@@ -8,13 +8,13 @@ import java.util.function.Function;
  */
 public class DatagramTranslator {
 
-
-    public static Function<DatagramPacket, Integer> packageToConfirmation =
-            datagram -> ByteUtil.fromByteArray(datagram.getData());
+    public static Function<Integer, DatagramPacket> confirmationToPackage = packageNumber ->
+            new DatagramPacket(ByteUtil.intToByteArray(packageNumber), 4);
+    public static Function<DatagramPacket, Integer> packageToConfirmation = datagram ->
+            ByteUtil.fromByteArray(datagram.getData());
 
 
     public static PartOfFile unWrap(DatagramPacket packet) {
-        //get number from 0 - 4 bytes
         byte numberInBytes[] = new byte[4];
         System.arraycopy(packet.getData(), 0, numberInBytes, 0, 4);
         int number = ByteUtil.fromByteArray(numberInBytes);

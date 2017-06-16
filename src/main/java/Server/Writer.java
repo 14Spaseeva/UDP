@@ -12,30 +12,27 @@ import java.io.*;
 /**
  * Created by ASPA on 05.05.2017.
  */
-public class FileWriter implements Cancable{
-    private static Logger log = LoggerFactory.getLogger("fileWriter");
-
+class Writer implements Cancable {
     private Thread thread;
     private final Channel<PartOfFile> chanel;
     private volatile boolean active = true;
 
-    FileWriter(int maxChannelSize) {
+    public Writer(int maxChannelSize) {
         chanel = new Channel<>(maxChannelSize);
     }
-
-    void init(InitPackage initPackage) {
+    public void init(InitPackage initPackage) {
         thread = new Thread(() -> {
             try {
-                File file = new File(initPackage.getFileName());
+                File file = new File(initPackage.fileName);
                 OutputStream outputStream = new FileOutputStream("send" + file.getName());
                 while (active) {
                     try {
                         PartOfFile partOfFile = chanel.get();
                         outputStream.write(partOfFile.data);
                         if (initPackage.totalPackageCount - 1 == partOfFile.number) {
-                            stop();
+                            cancel();
                         }
-                    } catch ( IOException e) {
+                    } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
@@ -48,13 +45,13 @@ public class FileWriter implements Cancable{
     }
 
     @Override
-    public void stop() {
+    public void cancel() {
         active = false;
         thread.interrupt();
-        log.info("Writer end work");
+        System.out.println("Writer is stopped");
     }
 
-    void write(PartOfFile bytes) {
+    public void write(PartOfFile bytes) {
         chanel.put(bytes);
     }
 }

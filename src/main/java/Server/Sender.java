@@ -24,8 +24,9 @@ public class Sender implements Cancable{
     private final Channel<Integer> packetChannel;
     private final DatagramSocket socket;
 
-
-    Sender(int chanalSize, DatagramSocket socket) throws SocketException {
+    public Sender(int chanalSize,
+                  DatagramSocket socket
+    ) throws SocketException {
         packetChannel = new Channel<>(chanalSize);
         this.socket = socket;
     }
@@ -38,14 +39,12 @@ public class Sender implements Cancable{
                     if (!active || socket.isClosed())
                         break;
                     try {
-                        DatagramPacket packet;
-
-                            Integer partOfFile = packetChannel.get();
-                            packet = new DatagramPacket(ByteUtil.intToByteArray(partOfFile), 4, address, port);
-                            packet.setPort(port);
-                            packet.setAddress(address);
-                            socket.send(packet);
-
+                        DatagramPacket packet = null;
+                        Integer partOfFile = packetChannel.get();
+                        packet = new DatagramPacket(ByteUtil.intToByteArray(partOfFile), 4, address, port);
+                        packet.setPort(port);
+                        packet.setAddress(address);
+                        socket.send(packet);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -55,16 +54,15 @@ public class Sender implements Cancable{
         }
     }
 
-    void sent(Integer packet) {
+    public void sent(Integer packet) {
         packetChannel.put(packet);
     }
 
-
     @Override
-    public void stop() {
+    public void cancel() {
         active = false;
         if (thread != null)
             thread.interrupt();
-        System.out.println("Sender end work");
+        System.out.println("Sender is stopped");
     }
 }

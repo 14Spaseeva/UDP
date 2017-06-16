@@ -5,35 +5,35 @@ import java.util.Arrays;
 /**
  * Created by ASPA on 05.06.2017.
  */
-public class CyclingFixedSizeDeque <T>{
+class CyclingFixedSizeDeque{
     private int head;
     private int tail;
     private final Object[] data;
 
-    CyclingFixedSizeDeque(int length) {
+    public CyclingFixedSizeDeque(int length) {
         this.data = new Object[length];
     }
 
-    void push(T elem) {
-        data [(tail++) % data.length] = elem;
+    public void push(PartOfFile elem) {
+        data[(tail++) % data.length] = elem;
     }
 
-    T remove() {
+    public PartOfFile remove() {
         if (head == tail)
             throw new IllegalStateException("head = tail");
         int index = (head++) % data.length;
-        final T result = (T) data[index];
+        final PartOfFile result = (PartOfFile) data[index];
         data[index] = null;
         return result;
     }
 
-    public T get(int i) {
+    public PartOfFile get(int i) {
         if (i >= data.length)
-            throw new IllegalArgumentException("i>=data.length!");
-        return (T) data[(head + i) % data.length];
+            throw new IllegalArgumentException("Element is not in window");
+        return (PartOfFile) data[(head + i) % data.length];
     }
 
-    int realSize() {
+    public int realSize() {
         int realSize = 0;
         for (Object aData : data) {
             if (aData != null)
@@ -42,10 +42,15 @@ public class CyclingFixedSizeDeque <T>{
         return realSize;
     }
 
-    private int size() {
+    public int size() {
         return data.length;
     }
 
+    public PartOfFile getHead() {
+        return (PartOfFile) data[head % size()];
+    }
 
-
+    public PartOfFile getTail() {
+        return (PartOfFile) data[tail % size()];
+    }
 }

@@ -1,12 +1,12 @@
 package CommonUtils;
 
-import java.util.stream.IntStream;
 
 /**
  * Created by ASPA on 05.06.2017.
  */
 public class ByteUtil {
-    static int fromByteArray(byte[] bytes) {
+
+    public static int fromByteArray(byte[] bytes) {
         return ((bytes[0] & 0xFF) << 24) |
                 ((bytes[1] & 0xFF) << 16) |
                 ((bytes[2] & 0xFF) << 8) |
@@ -22,6 +22,5 @@ public class ByteUtil {
                 (byte) (a & 0xFF)
         };
     }
-
 
 }

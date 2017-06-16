@@ -20,7 +20,7 @@ public class ServerReceiver implements Cancable{
     private final Thread thread;
     private volatile boolean active = true;
 
-    ServerReceiver(DatagramSocket socket, Consumer<DatagramPacket> datagramPacketConsumer, Supplier<byte[]> supplier) {
+    public ServerReceiver(DatagramSocket socket, Consumer<DatagramPacket> datagramPacketConsumer, Supplier<byte[]> supplier) {
         thread = new Thread(() -> {
             while (active) {
                 try {
@@ -37,7 +37,7 @@ public class ServerReceiver implements Cancable{
     }
 
     @Override
-    public void stop() {
+    public void cancel() {
         active = false;
         thread.interrupt();
     }

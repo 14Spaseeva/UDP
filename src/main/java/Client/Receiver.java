@@ -15,11 +15,10 @@ import java.util.function.Consumer;
  */
 public class Receiver implements Cancable {
 
-
     private final Thread thread;
     private volatile boolean active = true;
-//закидывает куски файла в сервер
-    Receiver(DatagramSocket socket, Consumer<Integer> confirm) {
+
+    public Receiver(DatagramSocket socket, Consumer<Integer> confirm) {
         thread = new Thread(() -> {
             while (active) {
                 try {
@@ -38,7 +37,7 @@ public class Receiver implements Cancable {
     }
 
     @Override
-    public void stop() {
+    public void cancel() {
         active = false;
         thread.interrupt();
     }
